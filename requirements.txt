@@ -1,0 +1,6 @@
+pandas
+pyarrow
+pytest
+numpy
+matplotlib
+scikit-image
