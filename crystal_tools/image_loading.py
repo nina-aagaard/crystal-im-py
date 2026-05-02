@@ -69,5 +69,6 @@ def load_images_from_folder(folder_path, max_images=None, file_extension='.png')
         images.append(img)
     
     print(f"Loaded {len(images)} images")
+    print(" ")
     
     return images, files_to_load

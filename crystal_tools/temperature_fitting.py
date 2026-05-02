@@ -1,49 +1,43 @@
 from crystal_tools.imports import *
 from scipy.optimize import curve_fit
 
-def detect_equilibration(time, temp, window=10, deriv_threshold=0.1):
-    """
-    Detect when the system reaches equilibration by analyzing the derivative
-    """
-    # Calculate smoothed derivative
-    dt = np.diff(time)
-    dT = np.diff(temp)
-    dT_dt = dT / dt
-    
-    # Smooth the derivative using a rolling window
-    if len(dT_dt) < window:
-        return int(len(time) * 0.3)
-    
-    smooth_deriv = np.convolve(dT_dt, np.ones(window)/window, mode='valid')
-    
-    # Find where the absolute derivative becomes consistently small
+def detect_equilibration(df, window=10, deriv_threshold=0.1):
+    # Smooth first (when enough data exists), then differentiate
+    if len(df['time']) > 2 * window:
+        smooth_temps = df['temp'].rolling(window=window, center=True).mean().bfill().ffill()
+    else:
+        smooth_temps = df['temp']
+
+    dt = np.diff(df['time'])
+    dT = np.diff(smooth_temps)
+    smooth_deriv = dT / dt
+
     for i in range(len(smooth_deriv)):
-        if i + window < len(smooth_deriv):
+        if i + window <= len(smooth_deriv):
             window_slice = smooth_deriv[i:i+window]
             if np.max(np.abs(window_slice)) < deriv_threshold:
-                return i + window // 2 + window // 2
-    
-    # Fallback: use 30% of data
-    return int(len(time) * 0.3)
+                return i + window // 2
+
+    return None  # equilibration not detected
 
 def sinusoidal_model(t, T_eq, A, omega, phi):
     """Sinusoidal oscillation model around equilibrium"""
     return T_eq + A * np.sin(omega * t + phi)
 
-def analyze_temperature_series(time, temp, target_temp=None):
+def analyze_temperature_series(df, target_temp=None):
     """
     Hybrid approach: detect equilibration, then fit sinusoidal model
     Returns equilibrium temperature and fit parameters
     """
     # Convert to numpy arrays if needed
-    time = np.array(time)
-    temp = np.array(temp)
+    time = np.array(df['time'])
+    temp = np.array(df['temp'])
     
     # Step 1: Detect equilibration point
-    eq_idx = detect_equilibration(time, temp)
+    eq_idx = detect_equilibration(df)
     
     # Make sure we have enough data
-    if eq_idx >= len(time) - 10:
+    if eq_idx is None or eq_idx >= len(time) - 10:
         eq_idx = int(len(time) * 0.3)
     
     # Extract post-equilibration data
@@ -119,7 +113,7 @@ def analyze_temperature_series(time, temp, target_temp=None):
             'temp_fit': temp_eq,
             'time_eq_start': time[eq_idx]
         }
-    
+
 # Define exponential function for fitting
 def exp_decay(t, a, b, c):
     """
@@ -133,3 +127,94 @@ def exp_decay(t, a, b, c):
     Returns the equilibrium value 'c'
     """
     return a * np.exp(-b * t) + c
+
+# Find equilibrated temperature and equilibrium constant for each experiment
+def calc_equilibrium(df_list, temp_model='sinusoidal'):
+    """
+    Parameters
+    ----------
+    df_list : list of DataFrames
+        Each DataFrame must contain 'time', 'temp', and 'q' columns.
+    temp_model : str, optional
+        Temperature fitting model to use. Either 'sinusoidal' (default) for the
+        hybrid sinusoidal model, or 'exponential' for the exponential decay model.
+    """
+    if temp_model not in ('sinusoidal', 'exponential'):
+        raise ValueError(f"temp_model must be 'sinusoidal' or 'exponential', got '{temp_model}'")
+
+    eq_temps = []
+    eq_consts = []
+    
+    for i, df in enumerate(df_list):
+        print(f"Processing Experiment {i + 1}...")
+        try:
+            time = df['time'].values
+            temp = df['temp'].values
+            q = df['q'].values
+            
+            # --- Temperature fitting ---
+            if temp_model == 'sinusoidal':
+                temp_result = analyze_temperature_series(df, target_temp=None)
+                equilibrium_temp = temp_result['equilibrium_temp']
+                eq_index = temp_result['time_eq_start']
+            else:  # exponential
+                popt_temp, _ = curve_fit(exp_decay, time, temp,
+                                         p0=[temp[0] - temp[-1], 0.1, temp[-1]],
+                                         bounds=([-np.inf, 0, -np.inf], [np.inf, np.inf, np.inf]),
+                                         maxfev=10000)
+                equilibrium_temp = popt_temp[2]
+                temp_result = None
+                eq_index = df['time'].min()  # no induction period detected; shade nothing
+            eq_temps.append(equilibrium_temp)
+            
+            # --- Reaction quotient: exponential decay ---
+            popt_q, _ = curve_fit(exp_decay, time, q, 
+                                  p0=[q[0] - q[-1], 0.1, q[-1]],
+                                  bounds=([-np.inf, 0, -np.inf], [np.inf, np.inf, np.inf]),
+                                  maxfev=10000)
+            equilibrium_constant = popt_q[2]
+            eq_consts.append(equilibrium_constant)
+            
+            print(f"  DataFrame {i + 1}: T_eq = {equilibrium_temp:.4f}, K_eq = {equilibrium_constant:.4f}")
+
+            # --- Plotting ---
+            figure, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+            # Temperature plot
+            axes[0].plot(df['time'], df['temp'], color='tab:orange')
+            axes[0].set_xlabel('Time (s)')
+            axes[0].set_ylabel('Temperature (°C)')
+            
+            # Overlay fit curve if sinusoidal model was used and fit succeeded
+            if temp_model == 'sinusoidal' and temp_result['fit_params'] is not None:
+                t_plot = temp_result['time_fit']
+                fit_curve = sinusoidal_model(t_plot, *temp_result['fit_params'])
+                axes[0].plot(t_plot + eq_index, fit_curve, color='tab:red',
+                             ls='--', lw=1.5, label='Sinusoidal fit')
+            elif temp_model == 'exponential':
+                fit_curve = exp_decay(time, *popt_temp)
+                axes[0].plot(time, fit_curve, color='tab:red',
+                             ls='--', lw=1.5, label='Exponential fit')
+            axes[0].axhline(equilibrium_temp, color='tab:orange', ls='--', label='Equilibrated temperature')
+            axes[0].legend()
+
+            # Reaction quotient plot
+            axes[1].plot(df['time'], df['q'], color='tab:purple')
+            axes[1].set_xlabel('Time (s)')
+            axes[1].set_ylabel('Reaction Quotient Q')
+            q_fit_curve = exp_decay(time, *popt_q)
+            axes[1].plot(time, q_fit_curve, color='tab:red',
+                         ls='--', lw=1.5, label='Exponential fit')
+            axes[1].axhline(equilibrium_constant, color='tab:purple', ls='--', alpha=0.6,
+                            label='Equilibrium constant')
+            axes[1].legend()
+
+        except Exception as e:
+            print(f"  DataFrame {i + 1}: Failed to fit - {str(e)}")
+            eq_temps.append(np.nan)
+            eq_consts.append(np.nan)
+
+    print("\nProcessing complete!")
+    print(f"Total experiments processed: {len(df_list)}")
+    print(f"Results stored in eq_temps and eq_consts lists")
+    return eq_temps, eq_consts
