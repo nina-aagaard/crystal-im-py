@@ -26,6 +26,7 @@ All required libraries and their versions are listed in requirements.txt and wil
   * **temperature_fitting.py**: calculates equilibrated temperature based on temperature data and equilibration constant based on reaction quotient using exponential decay functions
   * **thermo_profiles.py**: returns thermodynamic constants or functions based on van't Hoff regression parameters
   * **vant_hoff.py**: creates a van't Hoff plot using equilibrated temperatures and equilibrium constants, then fits either a linear or non-linear van't Hoff equation to data via regression
+* **heating_stage_insert_adapter**: .stl files for heating stage adapter for ITO LC cells
 * **notebooks**: contains demo notebook with full instructions for running through crystal image analysis and obtaining thermodynamic profiles
 * **.gitignore**: list of untracked files
 * **README.md**: this text file with instructions for using this repository
@@ -38,5 +39,11 @@ Once the repository is set up, you should be able to run the file **demo_noteboo
 To launch Jupyter Notebook and run **demo_notebook.ipynb**, navigate to the folder **crystal_im_py** in your command line in Terminal, Command Prompt, or PowerShell (depending on your OS configuration) using the command cd *location of crystal_im_py*. Then type jupyter notebook and press Enter. This should launch Jupyter Notebook in your web browser, where you can navigate to the **notebooks** folder and open **demo_notebook.ipynb**.
 
 ## How to Cite
+To cite the repository directly:
+> Aagaard, N.; Panagis, L. crystal_im_py (Version v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.21689911.
+
+If you are citing the research findings associated with this code, please cite the corresponding paper:
+> Aagaard, N.; Ragins-Da Rosa, A.; Goh, M.; Panagis, L.; Wiscons, R. A. The ferroelectric Curie temperature of azangulene. *J. Am. Chem. Soc.* (in review).
 
 ## License
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
