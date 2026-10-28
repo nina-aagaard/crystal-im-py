@@ -35,16 +35,21 @@ def fit_ext_vanthoff(x_inv_T, x_lnT, y_lnK):
     ss_res  = np.sum((y_lnK - y_pred) ** 2)
     ss_tot  = np.sum((y_lnK - y_lnK.mean()) ** 2)
     r2      = 1.0 - ss_res / ss_tot
-    return A, B, c, r2
 
-def thermodynamics_ext(A, B, c, T_ref):
-    """
-    Return ΔH, ΔS, ΔCp (all in J/mol or J/(mol·K)) at a reference temperature.
-    """
-    delta_Cp  = R * B
-    delta_H   = R * (A + B * T_ref)   # J/mol  (use kJ/mol by /1000 if preferred)
-    delta_S   = R * (B * np.log(T_ref) + B + c)  # J/(mol·K)
-    return delta_H, delta_S, delta_Cp
+    # Residuals for regression parameters:
+    n, p   = X.shape
+    dof    = n - p                      # degrees of freedom
+    if dof > 0:
+        s2   = ss_res / dof             # residual variance estimate
+        cov  = s2 * np.linalg.pinv(X.T @ X)   # covariance matrix of (A, B, c)
+        errs = np.sqrt(np.diag(cov))
+        sA, sB, sc = errs
+    else:
+        # n == p: exact fit, no information about uncertainty
+        cov = np.full((p, p), np.nan)
+        sA = sB = sc = np.nan
+
+    return A, B, c, sA, sB, sc, r2, cov
 
 # van't Hoff linear regression functions
 def fit_lin_vanthoff(x_inv_T, y_lnK):
@@ -71,17 +76,21 @@ def fit_lin_vanthoff(x_inv_T, y_lnK):
     ss_res = np.sum((y_lnK - y_pred) ** 2)
     ss_tot = np.sum((y_lnK - y_lnK.mean()) ** 2)
     r2     = 1.0 - ss_res / ss_tot
-    return A, c, r2
 
-def thermodynamics_lin(A, c):
-    """
-    Return ΔH, ΔS, ΔCp (all in J/mol or J/(mol·K)).
-    ΔCp is identically zero under the linear van't Hoff assumption.
-    """
-    delta_H  = R * A    # J/mol  (divide by 1000 for kJ/mol if preferred)
-    delta_S  = R * c    # J/(mol·K)
-    delta_Cp = 0.0      # linear model assumes temperature-independent ΔH
-    return delta_H, delta_S, delta_Cp
+    # Residuals for regression parameters:
+    n, p   = X.shape
+    dof    = n - p                      # degrees of freedom
+    if dof > 0:
+        s2   = ss_res / dof             # residual variance estimate
+        cov  = s2 * np.linalg.pinv(X.T @ X)   # covariance matrix of (A, c)
+        errs = np.sqrt(np.diag(cov))
+        sA, sc = errs
+    else:
+        # n == p: exact fit, no information about uncertainty
+        cov = np.full((p, p), np.nan)
+        sA = sc = np.nan
+
+    return A, c, sA, sc, r2, cov
 
 # van't Hoff plot function
 def vant_hoff_plot(eq_temps, eq_consts, vh_fit_model='nonlinear'):
@@ -96,6 +105,7 @@ def vant_hoff_plot(eq_temps, eq_consts, vh_fit_model='nonlinear'):
     van't Hoff plot
     van't Hoff regression parameters (linear or non-linear)
     Thermodynamic parameters (constant or functions of temp)
+    Thermodynamic parameter uncertainties (constant or functions of temp)
     """
     # Get parameters for van't Hoff plot
     vh_df = pd.DataFrame(list(zip(eq_temps, eq_consts)), columns=['temp', 'k_eq'])
@@ -111,8 +121,13 @@ def vant_hoff_plot(eq_temps, eq_consts, vh_fit_model='nonlinear'):
 
     # Add van't Hoff regression
     if vh_fit_model == 'nonlinear':
-        A, B, c, r2 = fit_ext_vanthoff(vh_df['1/T'], vh_df['ln(T)'], vh_df['ln(keq)'])
-        reg_coeffs = [A, B, c, r2]
+        A, B, c, sA, sB, sc, r2, cov = fit_ext_vanthoff(vh_df['1/T'], vh_df['ln(T)'], vh_df['ln(keq)'])
+        reg_coeffs = [A, B, c, sA, sB, sc, r2, cov]
+        print('ln K = -A/T + B*ln(T) + c')
+        print(f'A = {A} ± {sA}')
+        print(f'B = {B} ± {sB}')
+        print(f'c = {c} ± {sc}')
+        print(f'R² = {r2}')
 
         # Add regression to plot
         x_fit_inv = np.linspace(vh_df['1/T'].min(), vh_df['1/T'].max(), 200)
@@ -121,8 +136,12 @@ def vant_hoff_plot(eq_temps, eq_consts, vh_fit_model='nonlinear'):
         plt.plot(x_fit_inv, y_fit, linestyle='-', linewidth=2, alpha=0.8)
         
     elif vh_fit_model == 'linear':
-        A, c, r2 = fit_lin_vanthoff(vh_df['1/T'], vh_df['ln(keq)'])
-        reg_coeffs = [A, c, r2]
+        A, c, sA, sc, r2, cov = fit_lin_vanthoff(vh_df['1/T'], vh_df['ln(keq)'])
+        reg_coeffs = [A, c, sA, sc, r2, cov]
+        print('ln K = -A/T + c')
+        print(f'A = {A} ± {sA}')
+        print(f'c = {c} ± {sc}')
+        print(f'R² = {r2}')
 
         # Add regression to plot
         x_fit_inv = np.linspace(vh_df['1/T'].min(), vh_df['1/T'].max(), 200)
