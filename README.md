@@ -43,7 +43,7 @@ To cite the repository directly:
 > Aagaard, N.; Panagis, L. crystal_im_py (Version v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.21689911.
 
 If you are citing the research findings associated with this code, please cite the corresponding paper:
-> Aagaard, N.; Ragins-Da Rosa, A.; Goh, M.; Panagis, L.; Wiscons, R. A. The ferroelectric Curie temperature of azangulene. *J. Am. Chem. Soc.* (in review).
+> Aagaard, N.; Alvarez, A.; Petrov, M.; Kölbel, J.; Ragins-Da Rosa, A.; Goh, M.; Panagis, L.; Ruggiero, M. T.; Wiscons, R. A. Mapping bulk depolarization of the room-temperature organic ferroelectric azangulene. *J. Am. Chem. Soc.* (in review).
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
